@@ -229,6 +229,27 @@ def firstModule():
     
 def secondModule():
     st.subheader('Moduł 2')
+    uploaded_file = st.file_uploader("", type="xlsx")
+
+    if uploaded_file:
+        data = pd.read_excel(uploaded_file)
+    else:
+        data = pd.read_csv('data/income.csv', sep =';', decimal=',')
+    
+    st.dataframe(data)
+    
+    modes = ['Klasyfikacja', 'Ocena jakości klasyfikacji']
+    mode = st.selectbox(
+        'Wybierz tryb modułu',
+        modes
+    )
+    
+    if mode == modes[0]: #Klasyfikacja
+        st.write(modes[0])
+        
+    elif mode == modes[1]: #Ocena jakości klasyfikacji
+        st.write(modes[1])
+    
 
 def main():
     st.set_page_config(page_title = 'Systemy wspomagania decyzji')
