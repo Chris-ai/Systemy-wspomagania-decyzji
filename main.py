@@ -7,6 +7,7 @@ from sklearn.preprocessing import MinMaxScaler
 from random import seed
 from random import randrange
 from math import dist, sqrt
+from sklearn.metrics import accuracy_score
 
 from streamlit.elements.arrow import Data
 
@@ -344,7 +345,6 @@ def predictClassification(data, neighbors, k, classColumn, metric, newObject):
     maxVal = df_value_counts['counts'].max()
     
     potentialConflicts = []
-    potentialConflictsSums = []
     classOfNewObj = ' '
 
     for index, row in df_value_counts.iterrows():
@@ -355,6 +355,7 @@ def predictClassification(data, neighbors, k, classColumn, metric, newObject):
         classOfNewObj = resolveConflicts(data, neighbors, k, classColumn,potentialConflicts, metric, newObject)
     elif (len(potentialConflicts) == 1):
         classOfNewObj = potentialConflicts[0]
+        
     return classOfNewObj
      
 # Alogrithm
@@ -380,8 +381,17 @@ def KNN(data, newObject, metric, k, classColumn):
     
     prediction = predictClassification(data, neighbors, k, classColumn, metric, newObject)
     
-    newObject.append(prediction)
-    st.write(newObject)
+    # newObject.append(prediction)
+    # st.write(newObject)
+    return prediction
+
+
+def createNewObj(row, size):
+    newObj = []
+    for n in range(size):
+        newObj.append(row[n])
+
+    return newObj
 
 def secondModule():
     st.subheader('Moduł 2')
@@ -404,11 +414,13 @@ def secondModule():
     
     classColumn = st.selectbox(
         'Wybierz kolumnę decyzyjną',
-        data.columns.values
+        data.columns.values,
     )
     
+    
+
     if mode == modes[0]: #Klasyfikacja
-        
+       
        leftColumn, rightColumn =  st.columns(2)
        newObject = []
        
@@ -433,11 +445,43 @@ def secondModule():
             ) 
             
             if st.button('Klasyfikuj obiekt'):
-                KNN(data, newObject, metric, k, classColumn)
+                pred = KNN(data, newObject, metric, k, classColumn)
+                st.write(pred)
 
     elif mode == modes[1]: #Ocena jakości klasyfikacji
+        kColumn, metricColumn = st.columns(2)
         
-    
+        with kColumn:
+            k = st.number_input(
+                'Liczba sąsiadów',
+                value=3,
+                step=1
+            ) 
+            
+        with metricColumn:
+             metric = st.selectbox(
+                'Wybierz metrykę',
+                ['Euklidesowa', 'Manhattan', 'Czebyszewa', 'Mahalanobisa']
+            )
+             
+        dataModified = data.copy()
+        
+        if st.button('Ocena jakości'):
+            for index, row in data.iterrows():
+                newObj = createNewObj(row,len(data.iloc[:,:-1].columns))
+                dataModified.loc[index, classColumn] =  KNN(dataModified.iloc[index:],newObj,metric,k,classColumn)
+                # dataModified.loc[index, classColumn] = pred
+            originalCol, modifiedCol = st.columns(2)
+            
+            with originalCol:
+                st.dataframe(data)
+            with modifiedCol:  
+                st.dataframe(dataModified)
+            
+            col1, col2, col3 = st.columns(3)
+            col1.write('Dokładność algorytmu: ')
+            col2.write(round(accuracy_score(data[classColumn],dataModified[classColumn])*100, 2))
+            col3.write('%')
 
 def main():
     st.set_page_config(page_title = 'Systemy wspomagania decyzji')
