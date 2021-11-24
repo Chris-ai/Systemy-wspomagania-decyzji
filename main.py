@@ -1,4 +1,5 @@
 from pandas.core import base
+from sklearn import metrics
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -19,7 +20,7 @@ def firstModule():
     if uploaded_file:
         data = pd.read_excel(uploaded_file)
     else:
-        data = pd.read_csv('data/income.csv', sep =';', decimal=',')
+        data = pd.read_csv('data/arythmia.csv', sep =';', decimal=',')
     
     st.markdown('---')
     st.subheader('Zamiana danych tekstowych na numeryczne')
@@ -191,9 +192,10 @@ def firstModule():
 
 
     fig = px.histogram(
-        data,
+        dataModified,
         x = xHistogram,
-        nbins = bins
+        nbins = bins,
+        color = classColumn
     )
 
     st.plotly_chart(fig)
@@ -239,7 +241,8 @@ def euclideanDistance(data, newObj):
     for index, row in data.iloc[:,:-1].iterrows():
         sum = 0.0
         for i in range(len(newObj)):
-            sum += (row[i] - newObj[i])**2
+            # print(row[i], newObj[i])
+            sum += (np.float32(row[i]) - np.float32(newObj[i]))**2
         
         distance.append(sqrt(sum))
     
@@ -275,15 +278,18 @@ def chebyshevDistance(data, newObj):
 def mahalanobisDistance(data, newObj):
     distance = []
     v_m = []
-    cov_data = np.cov(data.iloc[:,:-1].T)
+    data = data.iloc[:,:-1]
+    cov_data = data.cov()
+    print(cov_data)
     
-    for index, row in data.iloc[:,:-1].iterrows():
+    for index, row in data.iterrows():
         v_m = []
         for i in range(len(newObj)):
             v_m.append(newObj[i] - row[i])
         
         result = np.array(v_m)
-        result = np.dot(result, np.linalg.inv(cov_data))
+        # result = np.dot(result, np.linalg.inv(cov_data))
+        result = np.dot(result,cov_data)
         result = np.dot(result, v_m)
 
         distance.append(np.sqrt(result))
@@ -296,17 +302,21 @@ def getNeighbors(data, metric, k):
     # specify column to sort and get ksmallest distances
     if metric == 'Euklidesowa':
         neighbors = data.sort_values(by='Metryka Euklidesowa').head(k)
+        data = data.drop(['Metryka Euklidesowa'], axis = 1)
         
     elif metric == 'Manhattan':
         neighbors =  data.sort_values(by='Metryka Manhattan').head(k)
+        data = data.drop(['Metryka Manhattan'], axis = 1)
         
     elif metric == 'Czebyszewa':
         neighbors =data.sort_values(by='Metryka Chebysheva').head(k)
+        data = data.drop(['Metryka Chebysheva'], axis = 1)
         
     elif metric == 'Mahalanobisa':
         neighbors = data.sort_values(by='Metryka Mahalanobisa').head(k)
+        data = data.drop(['Metryka Mahalanobisa'], axis = 1)
     
-    return neighbors
+    return neighbors, data
 
 def resolveConflicts(data,neighbors,k,classColumn,potentialConflicts, metric,newObject):
     
@@ -325,14 +335,16 @@ def resolveConflicts(data,neighbors,k,classColumn,potentialConflicts, metric,new
         if sumVal < minVal:
             minVal = sumVal
     
-    # If sum == minimum we assign the class
+    # If sum == minimum we assign the classs
     for name, sumVal in potentialConflictsSums:
         if sumVal == minVal:
             minSumsOfPotentialConflicts.append([name, sumVal])
-    
+    print(potentialConflictsSums)
+
+    print(minSumsOfPotentialConflicts)
     # Checking if there is more than one minimum sum of distances
     if (len(minSumsOfPotentialConflicts) > 1): # If so, KNN for k+1
-        KNN(data,newObject,metric,k,classColumn)
+        predict = KNN(data,newObject,metric,k+1,classColumn)
     elif (len(minSumsOfPotentialConflicts) == 1 ): # If not, we return a prediction
         predict = minSumsOfPotentialConflicts[0][0]
         
@@ -345,7 +357,7 @@ def predictClassification(data, neighbors, k, classColumn, metric, newObject):
     maxVal = df_value_counts['counts'].max()
     
     potentialConflicts = []
-    classOfNewObj = ' '
+    classOfNewObj = None
 
     for index, row in df_value_counts.iterrows():
         if(row['counts'] == maxVal):
@@ -377,14 +389,16 @@ def KNN(data, newObject, metric, k, classColumn):
     elif metric == 'Mahalanobisa':
         data['Metryka Mahalanobisa'] = mahalanobisDistance(data, newObject)
 
-    neighbors = getNeighbors(data, metric, k)
+    neighbors, data = getNeighbors(data, metric, k)
     
     prediction = predictClassification(data, neighbors, k, classColumn, metric, newObject)
-    
+    # print('pred: ', prediction)
+    # print('----')
+
+    # prediction = np.argmax(prediction)
     # newObject.append(prediction)
     # st.write(newObject)
     return prediction
-
 
 def createNewObj(row, size):
     newObj = []
@@ -400,21 +414,23 @@ def secondModule():
     if uploaded_file:
         data = pd.read_excel(uploaded_file)
     else:
-        data = pd.read_csv('data/income.csv', sep =';', decimal=',')
+        data = pd.read_csv('data/arythmia.csv', sep =';', decimal=',')
+    
     
     st.dataframe(data)
     st.markdown('---')
     
     modes = ['Klasyfikacja', 'Ocena jakości klasyfikacji']
-
+    metrics = ['Euklidesowa', 'Manhattan', 'Czebyszewa', 'Mahalanobisa']
     mode = st.selectbox(
         'Wybierz tryb modułu',
         modes
     )
     
     classColumn = st.selectbox(
-        'Wybierz kolumnę decyzyjną',
+        'Kolumna decyzyjna:',
         data.columns.values,
+        index= len(data.columns.values) - 1 
     )
     
     
@@ -435,7 +451,7 @@ def secondModule():
        with rightColumn:
             metric = st.selectbox(
                 'Wybierz metrykę',
-                ['Euklidesowa', 'Manhattan', 'Czebyszewa', 'Mahalanobisa']
+                metrics
             )
             
             k = st.number_input(
@@ -461,27 +477,52 @@ def secondModule():
         with metricColumn:
              metric = st.selectbox(
                 'Wybierz metrykę',
-                ['Euklidesowa', 'Manhattan', 'Czebyszewa', 'Mahalanobisa']
+                metrics
             )
              
+        data[classColumn] = pd.Categorical(data[classColumn]).codes     
         dataModified = data.copy()
+        
+        # for col in data.columns.drop([classColumn]):
+        #     data[col] = pd.to_numeric(data[col], downcast="float")
+            
+        dataNormalized = data.copy()
+        for col in dataNormalized.columns.drop([classColumn]):
+            
+            dataNormalized[col] = ( ((dataNormalized[col])  - (dataNormalized[col]).mean())/dataNormalized[col].std())
+            
         
         if st.button('Ocena jakości'):
             for index, row in data.iterrows():
                 newObj = createNewObj(row,len(data.iloc[:,:-1].columns))
                 dataModified.loc[index, classColumn] =  KNN(dataModified.iloc[index:],newObj,metric,k,classColumn)
                 # dataModified.loc[index, classColumn] = pred
-            originalCol, modifiedCol = st.columns(2)
+        originalCol, modifiedCol = st.columns(2)
             
-            with originalCol:
-                st.dataframe(data)
-            with modifiedCol:  
-                st.dataframe(dataModified)
+        with originalCol:
+            st.dataframe(data)
+        with modifiedCol:  
+            st.dataframe(dataNormalized)
             
-            col1, col2, col3 = st.columns(3)
-            col1.write('Dokładność algorytmu: ')
-            col2.write(round(accuracy_score(data[classColumn],dataModified[classColumn])*100, 2))
-            col3.write('%')
+        col1, col2, col3 = st.columns(3)
+        col1.write('Dokładność algorytmu: ')
+        col2.write(round(accuracy_score(data[classColumn],dataModified[classColumn])*100, 2))
+        col3.write('%')
+
+
+# RAPORT #            
+        # file = open('data/data-irisNormalized-quality-assessment.txt', 'w')   
+        # if st.button('Ocena jakości'):
+            
+        #     for metric in metrics:
+        #         for k in range(1, len(dataNormalized)):
+        #             dataIterrate = dataNormalized.copy()
+        #             for index, row in dataIterrate.iterrows():
+        #                 newObj = createNewObj(row,len(dataIterrate.iloc[:,:-1].columns))
+        #                 dataIterrate.loc[index, classColumn] =  KNN(dataIterrate.iloc[index:],newObj,metric,k,classColumn)
+                        
+        #             print(k, round(accuracy_score(dataNormalized[classColumn],dataIterrate[classColumn])*100, 2), metric, file=file)
+        #     file.close()  
 
 def main():
     st.set_page_config(page_title = 'Systemy wspomagania decyzji')
