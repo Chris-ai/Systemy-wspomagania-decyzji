@@ -1,4 +1,7 @@
+from types import CellType
+from matplotlib import markers
 from pandas.core import base
+from pandas.io.formats.format import buffer_put_lines
 from sklearn import metrics
 import streamlit as st
 import pandas as pd
@@ -9,8 +12,13 @@ from random import seed
 from random import randrange
 from math import dist, sqrt
 from sklearn.metrics import accuracy_score
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import jaccard_score
+from sklearn.metrics import matthews_corrcoef
 
 from streamlit.elements.arrow import Data
+from streamlit.elements.color_picker import ColorPickerMixin
 
 def firstModule():
     st.subheader('Moduł 1')
@@ -20,7 +28,7 @@ def firstModule():
     if uploaded_file:
         data = pd.read_excel(uploaded_file)
     else:
-        data = pd.read_csv('data/arythmia.csv', sep =';', decimal=',')
+        data = pd.read_csv('data/income.csv', sep =';', decimal=',')
     
     st.markdown('---')
     st.subheader('Zamiana danych tekstowych na numeryczne')
@@ -288,7 +296,7 @@ def mahalanobisDistance(data, newObj):
             v_m.append(newObj[i] - row[i])
         
         result = np.array(v_m)
-        # result = np.dot(result, np.linalg.inv(cov_data))
+        #result = np.dot(result, np.linalg.inv(cov_data))
         result = np.dot(result,cov_data)
         result = np.dot(result, v_m)
 
@@ -319,6 +327,7 @@ def getNeighbors(data, metric, k):
     return neighbors, data
 
 def resolveConflicts(data,neighbors,k,classColumn,potentialConflicts, metric,newObject):
+    
     
     potentialConflictsSums = []
     minSumsOfPotentialConflicts = []
@@ -414,7 +423,7 @@ def secondModule():
     if uploaded_file:
         data = pd.read_excel(uploaded_file)
     else:
-        data = pd.read_csv('data/arythmia.csv', sep =';', decimal=',')
+        data = pd.read_csv('data/income.csv', sep =';', decimal=',')
     
     
     st.dataframe(data)
@@ -509,8 +518,8 @@ def secondModule():
         col2.write(round(accuracy_score(data[classColumn],dataModified[classColumn])*100, 2))
         col3.write('%')
 
-
 # RAPORT #            
+
         # file = open('data/data-irisNormalized-quality-assessment.txt', 'w')   
         # if st.button('Ocena jakości'):
             
@@ -524,18 +533,205 @@ def secondModule():
         #             print(k, round(accuracy_score(dataNormalized[classColumn],dataIterrate[classColumn])*100, 2), metric, file=file)
         #     file.close()  
 
+def euclidean(pointA, pointB):
+    pd.to_numeric(pointA)
+    pd.to_numeric(pointB)
+    return np.sqrt((pointA[0]-pointB[0])**2 + (pointA[1]-pointB[1])**2)
+
+def l1(pointA, pointB):
+    return np.abs(pointA[0] - pointB[0]) + np.abs(pointA[1] - pointB[1])
+    
+def lInfinity(pointA, pointB):
+    return  max(abs((pointA[0] - pointB[0])), abs((pointA[1] - pointB[1])))
+
+def mahalanobis(pointA, pointB):
+    v_m = []
+    cov_data = np.cov(pointA)
+    
+    for i in range(len(pointB)):
+        v_m.append(pointB[i] - pointA[i])
+        print(v_m, 'spacja ', cov_data)
+        result = np.array(v_m)
+        # result = np.dot(result, np.linalg.inv(cov_data))
+        result = np.dot(result,cov_data)
+        result = np.dot(result, v_m)
+        
+    return np.sqrt(result)
+
+def kMeans(data, k, metric):
+    diff = 1
+    cluster = np.zeros(data.shape[0])
+    
+    #select k random centroirds
+    random_id = np.random.choice(len(data), size = k, replace = False)
+    centroids = data.iloc[random_id, :].values
+    
+    while diff:
+        
+        for i,row in enumerate(data.values):
+            mn_dist = float('inf')
+            for idx, centroid in enumerate(centroids): 
+                if metric == 'Euklidesowa':
+                    d = euclidean(centroid, row)
+                elif metric == 'l1':
+                    d = l1(centroid, row)
+                elif metric == 'l nieskończoność':
+                    d = lInfinity(centroid, row)
+                elif metric == 'Mahalanobisa':
+                    d = mahalanobis(centroid, row)
+                    
+                print(mn_dist, 'd: ', d)
+                
+                if mn_dist > d:
+                    mn_dist = d
+                    cluster[i] = idx
+                
+                print(cluster)
+        
+               
+        new_centroids = pd.DataFrame(data).groupby(by=cluster).mean().values
+        print(new_centroids, 'soacjaaaa ' ,centroids, 'd= ', d) 
+        if np.count_nonzero(centroids-new_centroids) == 0:
+            diff = 0
+        else:
+            centroids = new_centroids        
+        
+    return centroids, cluster
+
+def calculate_cost(X, centroids, cluster):
+    sum = 0
+    for i, val in enumerate(X):
+        sum += np.sqrt((centroids[int(cluster[i]), 0]-val[0])**2 + (centroids[int(cluster[i]), 1]-val[1])**2)
+            
+    return sum
+
+def thirdModule():
+    st.subheader('Moduł 3')
+    uploaded_file = st.file_uploader("", type=["csv", 'txt'])
+    col1, col2 = st.columns(2)
+    metrics = ['Euklidesowa', 'l1', 'l nieskończoność', 'Mahalanobisa']
+    with col1:  
+        header_radio = st.radio(
+        "Dane",
+        ('Z nagłówkami', 'Bez nagłówków'))
+        
+    with col2:
+        class_column = st.radio(
+        "",
+        ('Z klasą decyzyjną', 'Bez klasy decyzyjnej'))
+          
+    
+    if uploaded_file:
+        if header_radio == 'Bez nagłówków':
+            data = pd.read_csv(uploaded_file, sep ="\s+|;|:", decimal=',', header=None) 
+        elif header_radio == 'Z nagłówkami':
+            data = pd.read_csv(uploaded_file, sep ="\s+|;|:", decimal=',')
+            
+            whole_data = data.copy()
+            
+        if class_column == 'Z klasą decyzyjną':
+                data = data.drop(data.iloc[:,-1:], axis=1)
+    else:
+        if header_radio == 'Bez nagłówków':
+            data = pd.read_excel('data/income.xlsx', header=None)
+        elif header_radio == 'Z nagłówkami':
+            data = pd.read_excel('data/income.xlsx')
+            
+            whole_data = data.copy()
+            
+        if class_column == 'Z klasą decyzyjną':
+            data = data.drop(data.iloc[:,-1:], axis=1)
+
+    st.dataframe(data)
+    st.markdown('---')
+    st.subheader('Algorytm K-średnich')
+    
+    colLeft, colCenter, colRight = st.columns(3)
+    
+    with colLeft:
+        k = st.number_input(
+            "k",
+            len(whole_data.iloc[:,-1:].value_counts()),
+        )
+    with colCenter:
+        metric = st.selectbox(
+                'Wybierz metrykę',
+                metrics
+            )
+        
+    with colRight:
+        st.write('Grupowanie')
+        button = st.button('Start')
+        
+        st.write('Elbow Method')
+        buttonElbow = st.button("OK")
+    
+    if button:
+        centroids, cluster = kMeans(data,k,metric)
+        print(centroids, cluster)
+        # print(whole_data.iloc[:,-1:].head(15))
+    
+    if buttonElbow:
+        # Elbow Method #
+  
+        cost_list = []
+
+        for k in range(1, 10):
+            centroids, cluster = kMeans(data, k, metric)
+            sum = 0
+            for i, val in enumerate(data.values):
+                cost = euclidean(centroids[int(cluster[i])], val)
+                sum += cost
+            
+            cost_list.append(sum)
+           
+
+        fig = plt.figure(figsize=(15,15))
+        print(cost_list, len(cost_list))
+        sns.lineplot(x=range(1,10), y=cost_list, marker='o')
+        plt.xlabel('k')
+        plt.ylabel('WCSS')
+        plt.savefig('elbowMethod-plt.png')
+    
+    # Acc_score #
+    y_true_col = pd.factorize(whole_data[whole_data.columns.values[-1]])[0]
+    
+    y_true_alf = pd.Categorical(whole_data[whole_data.columns.values[-1]]).codes
+    
+    print(y_true_alf)
+    print(y_true_col)
+    
+    print('Dokładność predykcji (Jaccard_score): ', max(jaccard_score(y_true_col, cluster, average='macro'),jaccard_score(y_true_alf, cluster, average='macro')) )
+    
+    print('Dokładność predykcji (Matthews_corrcoef): ', max(matthews_corrcoef(y_true_col, cluster),matthews_corrcoef(y_true_alf, cluster)))
+    
+    plt.figure(figsize=(15,15))
+        
+    fig = px.scatter(
+        data,
+        x=data.iloc[:,0],
+        y=data.iloc[:, 1],
+        color = cluster,
+        symbol = cluster
+    )
+    fig.update_layout(showlegend=False)
+        
+    st.plotly_chart(fig)
+
 def main():
     st.set_page_config(page_title = 'Systemy wspomagania decyzji')
     st.header('SWD 2021')
     
     choice = st.sidebar.selectbox(
         '',
-        ['Moduł 1', 'Moduł 2']
+        ['Moduł 1', 'Moduł 2', 'Moduł 3']
     )
 
     if choice == 'Moduł 1':
         firstModule()
     elif choice == 'Moduł 2':
         secondModule()
+    elif choice == 'Moduł 3':
+        thirdModule()
         
 main()
